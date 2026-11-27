@@ -7,6 +7,8 @@ mod census;
 mod inspect;
 #[cfg(windows)]
 mod play;
+#[cfg(windows)]
+mod d3d12_sdk;
 #[cfg(all(windows, feature = "diagnostics"))]
 mod replay;
 mod run;
