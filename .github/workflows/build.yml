@@ -1,1 +1,53 @@
+name: Build victory.exe
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: D:\\vt
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain (pinned in rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release --locked -p victory
+
+      - name: Package with the D3D12 Agility SDK runtime
+        shell: pwsh
+        run: |
+          $ver  = "1.620.2"   # must match D3D12SDKVersion in d3d12_sdk.rs: 1.620.x -> 620
+          $out  = "dist"
+          $temp = Join-Path $env:TEMP "d3d12sdk"
+          New-Item -ItemType Directory -Force -Path $out, $temp | Out-Null
+
+          Copy-Item "D:\\vt\\release\\victory.exe" "$out\\victory.exe"
+
+          $zip = Join-Path $temp "sdk.zip"
+          Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.direct3d.d3d12/$ver/microsoft.direct3d.d3d12.$ver.nupkg" -OutFile $zip
+          Expand-Archive $zip -DestinationPath (Join-Path $temp "ext") -Force
+
+          New-Item -ItemType Directory -Force -Path "$out\\D3D12" | Out-Null
+          Copy-Item (Join-Path $temp "ext\\build\\native\\bin\\x64\\D3D12Core.dll") "$out\\D3D12\\D3D12Core.dll"
+
+          Get-ChildItem -Recurse $out | Select-Object FullName, Length | Format-Table -AutoSize
+          Compress-Archive -Path "$out\\*" -DestinationPath "victory-d3d12.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: victory-d3d12
+          path: victory-d3d12.zip
+          if-no-files-found: error
